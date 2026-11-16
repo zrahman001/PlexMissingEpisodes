@@ -1,269 +1,242 @@
-# PlexMissingEpisodes
+# Plex Missing Episodes (TVMaze)
 
-A PowerShell script that identifies missing TV show episodes in your Plex library by comparing against TheTVDB's episode database.
+A PowerShell script that compares the episodes recorded in a Plex TV library with the episode listings in [TVMaze](https://www.tvmaze.com/) and reports episodes that appear to be missing from Plex.
+
+The script uses TVMaze's public API, so **no TVMaze account, API key, or PIN is required**. It uses Plex's TVDB and IMDb identifiers where available and falls back to a conservative show-title match when necessary.
 
 ## Features
 
-- **Automatic Discovery**: Scans all TV show libraries in Plex without manual section configuration
-- **TheTVDB Integration**: Uses TheTVDB API v4 for accurate episode data
-- **TVDB Data Caching**: Speeds up repeated runs and reduces API calls with configurable expiration
-- **Smart Episode Detection**: Handles multi-episode files, episode ranges (e.g., "S02E01-02"), and date-based titles (e.g., "Episode 01-11")
-- **Improved Daily Show Matching**: Uses date-based matching for shows that use year-based seasons (like Jeopardy!)
-- **Flexible Configuration**: Configure via command-line parameters or script variables
-- **Dual Output Formats**:
-  - **Standard**: Detailed reports with summaries and grouping
-  - **Simple**: Clean one-line format perfect for searching and automation
-- **Flexible Output**: Console output with colors OR save directly to file with timestamp
-- **Flexible Filtering**: Process all shows, ignore specific shows, or focus on a single show
-- **Year Detection**: Automatically includes show year when available from Plex metadata
-- **Detailed Reporting**: Shows missing episodes organized by season with episode names
-- **Show Validation**: Reports shows that are missing valid TVDB IDs or are improperly matched
-- **Automation Friendly**: No user prompts when saving to file, perfect for scheduled tasks
-- **Metadata Validation**: Reports episodes with missing season/episode numbers
-- **MFA Support**: Supports authentication via Plex Token for users with Multi-Factor Authentication enabled
-- **Comprehensive Error Handling**: Robust authentication and API error management
-
-## Quick Start
-
-1. **Get TheTVDB API Key**: Register at [TheTVDB.com](https://thetvdb.com/api-information) and obtain your API key
-2. **Configure Script**: Either edit the configuration variables in `PlexMissingEpisodes.ps1` OR pass parameters when running
-3. **Run Script**: Execute the PowerShell script with or without parameters
-
-## Configuration
-
-You can configure the script in two ways:
-
-### Method 1: Command Line Parameters (Recommended)
-
-Pass configuration as parameters when running the script:
-
-```powershell
-./PlexMissingEpisodes.ps1 -ApiKey "your-api-key" -PlexServer "http://your-server:32400" -PlexUsername "username" -PlexPassword "password"
-```
-
-### Method 2: Edit Script Variables
-
-Edit the default values in the script's configuration section (lines 45-67). Parameters will override these defaults when provided:
-
-```powershell
-# TheTVDB Authentication - update the fallback values
-$TheTVDBAuthentication = @{
-    "apikey" = if ($ApiKey) { $ApiKey } else { "your-api-key-here" }
-    "pin"    = if ($Pin) { $Pin } else { "" } # Optional: Only needed for subscriber keys
-}
-
-# Plex Server Settings - update the fallback values
-if (-not $PlexServer) { $PlexServer = "http://your-plex-server:32400" }
-if (-not $PlexUsername) { $PlexUsername = 'your-username' }
-if (-not $PlexPassword) { $PlexPassword = 'your-password' }
-
-# Filtering Options - update the fallback values
-# Array of show names to ignore, example included
-$IgnoreList = if ($IgnoreShows) { $IgnoreShows } else {
-    [system.collections.generic.list[string]]::new(
-        # "Jeopardy!"
-    )
-}
-if (-not $SingleShowFilter) { $SingleShowFilter = "" }
-```
-
-**Note**: Parameters take precedence over script variables, allowing you to save defaults in the script while overriding specific values as needed.
-
-## Parameters
-
-| Parameter           | Type     | Description                                    | Example                             |
-| ------------------- | -------- | ---------------------------------------------- | ----------------------------------- |
-| `-ApiKey`           | String   | TheTVDB API key (required)                     | `-ApiKey "abc123"`                  |
-| `-Pin`              | String   | TheTVDB Subscriber PIN (optional)              | `-Pin "1234"`                       |
-| `-PlexServer`       | String   | Plex server URL                                | `-PlexServer "http://server:32400"` |
-| `-PlexUsername`     | String   | Plex username                                  | `-PlexUsername "myuser"`            |
-| `-PlexPassword`     | String   | Plex password                                  | `-PlexPassword "mypass"`            |
-| `-PlexToken`        | String   | Plex authentication token (bypasses login/MFA) | `-PlexToken "abc123xyz"`            |
-| `-SingleShowFilter` | String   | Process only this show (partial matching)      | `-SingleShowFilter "Breaking Bad"`  |
-| `-IgnoreShows`      | String[] | Shows to ignore (comma-separated)              | `-IgnoreShows "Show1","Show2"`      |
-| `-OutputFile`       | String   | Save results to file instead of console        | `-OutputFile "missing.txt"`         |
-| `-SimpleOutput`     | Switch   | Use simple one-line format for easy searching  | `-SimpleOutput`                     |
-| `-IncludeExtras`    | Switch   | Include Season 0 (specials/extras) in results  | `-IncludeExtras`                    |
-| `-CacheRetentionDays`| Int     | Days to keep the TVDB data cached (default: 1) | `-CacheRetentionDays 7`             |
-| `-ForceRefresh`     | Switch   | Force refresh of TVDB data, bypassing cache    | `-ForceRefresh`                     |
-
-## Usage Examples
-
-### Basic Usage (using script defaults)
-
-```powershell
-./PlexMissingEpisodes.ps1
-```
-
-### With Parameters
-
-```powershell
-# Minimal parameters (others use script defaults)
-./PlexMissingEpisodes.ps1 -ApiKey "your-tvdb-api-key"
-
-# Full configuration via parameters
-./PlexMissingEpisodes.ps1 -ApiKey "your-api-key" -PlexServer "http://server:32400" -PlexUsername "user" -PlexPassword "pass"
-
-# Using Plex Token (Required if MFA is enabled)
-./PlexMissingEpisodes.ps1 -ApiKey "your-api-key" -PlexServer "http://server:32400" -PlexToken "your-plex-token"
-
-# Focus on specific show
-./PlexMissingEpisodes.ps1 -SingleShowFilter "Breaking Bad"
-
-# Ignore multiple shows
-./PlexMissingEpisodes.ps1 -IgnoreShows "Jeopardy!","Daily Show","News"
-
-# Save output directly to file (no "Press any key" prompt)
-./PlexMissingEpisodes.ps1 -OutputFile "missing-episodes.txt"
-
-# Use simple output format for easy searching
-./PlexMissingEpisodes.ps1 -SimpleOutput
-
-# Include Season 0 (specials/extras) in results
-./PlexMissingEpisodes.ps1 -IncludeExtras
-
-# Combine simple output with file saving
-./PlexMissingEpisodes.ps1 -SimpleOutput -OutputFile "missing-simple.txt"
-```
-
-### Save Output to File
-
-```powershell
-# Using the OutputFile parameter (recommended - includes timestamp and no user prompt)
-./PlexMissingEpisodes.ps1 -OutputFile "missing-episodes.txt"
-
-# Save simple format for automation/processing
-./PlexMissingEpisodes.ps1 -SimpleOutput -OutputFile "missing-simple.txt"
-
-# Using shell redirection (alternative method)
-./PlexMissingEpisodes.ps1 -ApiKey "your-key" | Out-File "missing-episodes.txt"
-```
-
-### Get Help
-
-```powershell
-Get-Help ./PlexMissingEpisodes.ps1 -Detailed
-```
+- Scans the TV-show sections in a Plex Media Server library.
+- Checks every show, or limits the scan to a show name supplied with `-SingleShowFilter`.
+- Excludes selected shows with `-IgnoreShows`.
+- Resolves Plex TVDB IDs and IMDb IDs to TVMaze show records. If neither identifier resolves, it attempts an exact, normalised title match, using the premiere year when Plex provides one.
+- Compares Plex episodes with TVMaze episode metadata using air dates, season and episode numbers, and episode titles.
+- Includes handling for daily shows and date-based episode naming.
+- Can include Season 0 specials/extras.
+- Supports detailed and compact report formats, console output, and saving the report to a file.
+- Caches TVMaze show mappings and episode data locally to reduce repeat API requests.
 
 ## Requirements
 
-- **PowerShell 5.1+**
-- **Network Access**: Internet connection for TheTVDB API and Plex server access
-- **TheTVDB API Key**: Free registration required
-- **Plex Credentials**: Username/password or configure IP allowlist in Plex settings
+- Plex Media Server reachable from the computer running the script.
+- A Plex account and either a Plex authentication token or Plex username and password.
+- Internet access to `api.tvmaze.com`.
+- Windows PowerShell 5.1 is the recommended runtime.
 
-## Output Formats
+The script has been designed for a Plex TV library. It does not scan movie libraries.
 
-The script provides two output formats:
+## Download and setup
 
-### Standard Format (Default)
+1. Download `PlexMissingEpisodes-TVmaze.ps1` from this repository.
+2. Place it in a folder where it can create and update its cache file.
+3. Make sure the computer running the script can reach your Plex server and the TVMaze API.
+4. Open PowerShell and run the script with your Plex server URL and authentication details.
 
-- **Progress Tracking**: Real-time updates during library scanning
-- **Missing Episode Report**: Detailed breakdown by show and season
-- **Metadata Warnings**: Alerts for episodes with missing information
-- **Summary Statistics**: Total count of missing episodes
+The Plex server URL should include the protocol, host name or IP address, and port. Do not add a trailing slash.
 
-```text
-=== MISSING EPISODES REPORT ===
-Show Name
-  Total missing episodes: 5
-  Missing episodes by season:
-    Season 1: 2 episodes
-      S01E03 - Episode Title
-      S01E07 - Another Episode
-    Season 2: 3 episodes
-      S02E01 - Season Premiere
-      ...
-```
-
-### Simple Format (`-SimpleOutput`)
-
-Perfect for automation, searching, and scripting with clean one-line entries:
-
-```text
-What We Do in the Shadows (2019) - S03E06 - The Escape
-Breaking Bad (2008) - S02E03 - Bit by a Dead Bee
-The Office (2005) - S05E14 - Lecture Circuit: Part 1
-```
-
-**Format**: `Show Name (Year) - SXXEXX - Episode Title`
-
-- Includes year when available from Plex metadata
-- One line per missing episode
-- Easy to grep, sort, and process with other tools
-
-## Practical Examples
-
-### Scenario 1: First-time Setup
-
-If you're running the script for the first time and want to override the default credentials:
+Example:
 
 ```powershell
-./PlexMissingEpisodes.ps1 -ApiKey "your-tvdb-key" -PlexServer "http://192.168.1.100:32400" -PlexUsername "admin" -PlexPassword "securepass"
+http://192.168.1.10:32400
 ```
 
-### Scenario 2: Check Specific Show
+### Plex authentication
 
-To quickly check missing episodes for a specific show without editing the script:
+You can authenticate in either of two ways:
+
+- **Plex token:** Supply `-PlexToken`. This bypasses the script's Plex username/password sign-in step.
+- **Plex username and password:** Supply both `-PlexUsername` and `-PlexPassword`. The script requests a Plex authentication token from Plex.tv before connecting to your server.
+
+A Plex token grants access to your Plex account and should be treated like a password. Do not commit tokens or passwords to the repository, put them in shared scripts, or publish them in screenshots or logs.
+
+## Usage
+
+Run the script from the folder where it was downloaded. Replace the example server address and token with your own values.
+
+### Scan all TV shows
 
 ```powershell
-./PlexMissingEpisodes.ps1 -SingleShowFilter "Stranger Things"
+.\PlexMissingEpisodes-TVmaze.ps1 `
+    -PlexServer "http://192.168.1.10:32400" `
+    -PlexToken "YOUR_PLEX_TOKEN"
 ```
 
-### Scenario 3: Exclude Multiple Shows
+### Scan one show
 
-To run the check while ignoring several shows that you know have issues:
+`-SingleShowFilter` performs a partial, case-insensitive name match. Only matching shows are processed.
 
 ```powershell
-./PlexMissingEpisodes.ps1 -IgnoreShows "The Daily Show","Saturday Night Live","Jeopardy!"
+.\PlexMissingEpisodes-TVmaze.ps1 `
+    -PlexServer "http://192.168.1.10:32400" `
+    -PlexToken "YOUR_PLEX_TOKEN" `
+    -SingleShowFilter "Breaking Bad"
 ```
 
-### Scenario 4: Save Configuration, Override Specific Values
+### Ignore selected shows
 
-Keep your default settings in the script but override just the show filter:
+`-IgnoreShows` accepts an array of show names. The names are compared with the Plex library show titles. The ignore list is applied when `-SingleShowFilter` is not specified.
 
 ```powershell
-# Script has your default Plex/TVDB settings, but you want to check one show
-./PlexMissingEpisodes.ps1 -SingleShowFilter "The Office"
+.\PlexMissingEpisodes-TVmaze.ps1 `
+    -PlexServer "http://192.168.1.10:32400" `
+    -PlexToken "YOUR_PLEX_TOKEN" `
+    -IgnoreShows "Show Name One", "Show Name Two"
 ```
 
-### Scenario 5: Simple Output for Easy Searching
+### Include specials and extras
 
-Use simple output format for automation and easy searching:
+By default, Season 0 is excluded. Add `-IncludeExtras` to request TVMaze specials and include Season 0 episodes in the comparison.
 
 ```powershell
-# Get simple output for all shows
-./PlexMissingEpisodes.ps1 -SimpleOutput
-
-# Search for specific shows in simple output
-./PlexMissingEpisodes.ps1 -SimpleOutput | grep "Breaking Bad"
-
-# Count missing episodes per show
-./PlexMissingEpisodes.ps1 -SimpleOutput | cut -d' ' -f1-3 | sort | uniq -c
-
-# Save simple output to file for processing
-./PlexMissingEpisodes.ps1 -SimpleOutput -OutputFile "missing-simple.txt"
+.\PlexMissingEpisodes-TVmaze.ps1 `
+    -PlexServer "http://192.168.1.10:32400" `
+    -PlexToken "YOUR_PLEX_TOKEN" `
+    -IncludeExtras
 ```
 
-### Scenario 6: Automated Reports
+### Use compact output
 
-For scheduled tasks or automation where you don't want user interaction:
+Add `-SimpleOutput` to request one line per missing episode instead of the detailed report.
 
 ```powershell
-# Save to timestamped file automatically (no "Press any key" prompt)
-./PlexMissingEpisodes.ps1 -OutputFile "reports/missing-episodes-$(Get-Date -Format 'yyyy-MM-dd').txt"
-
-# Run specific show check and save results
-./PlexMissingEpisodes.ps1 -SingleShowFilter "Game of Thrones" -OutputFile "got-missing.txt"
-
-# Get simple format for automated processing
-./PlexMissingEpisodes.ps1 -SimpleOutput -OutputFile "missing-simple.txt"
+.\PlexMissingEpisodes-TVmaze.ps1 `
+    -PlexServer "http://192.168.1.10:32400" `
+    -PlexToken "YOUR_PLEX_TOKEN" `
+    -SimpleOutput
 ```
+
+### Save the report to a file
+
+Use `-OutputFile` to save the report. The destination folder must already exist.
+
+```powershell
+.\PlexMissingEpisodes-TVmaze.ps1 `
+    -PlexServer "http://192.168.1.10:32400" `
+    -PlexToken "YOUR_PLEX_TOKEN" `
+    -OutputFile "C:\Reports\Plex-Missing-Episodes.txt"
+```
+
+### Refresh cached episode data
+
+The script keeps episode data in a local cache. Use `-CacheRetentionDays` to set how long episode data may be reused, or `-ForceRefresh` to bypass the episode cache for the current run.
+
+```powershell
+# Reuse episode data only while it is less than 3 days old
+.\PlexMissingEpisodes-TVmaze.ps1 `
+    -PlexServer "http://192.168.1.10:32400" `
+    -PlexToken "YOUR_PLEX_TOKEN" `
+    -CacheRetentionDays 3
+```
+
+```powershell
+# Fetch episode data again, ignoring the existing episode cache
+.\PlexMissingEpisodes-TVmaze.ps1 `
+    -PlexServer "http://192.168.1.10:32400" `
+    -PlexToken "YOUR_PLEX_TOKEN" `
+    -ForceRefresh
+```
+
+`-ForceRefresh` bypasses the cached episode lists. Cached Plex-ID-to-TVMaze-ID mappings are still reused.
+
+## Parameters
+
+| Parameter | Type | Required | Default | Description |
+|---|---|---:|---|---|
+| `-PlexServer` | String | Yes | — | Plex Media Server base URL, for example `http://192.168.1.10:32400`. |
+| `-PlexUsername` | String | No* | Empty | Plex account username, used with `-PlexPassword` when no token is supplied. |
+| `-PlexPassword` | String | No* | Empty | Plex account password, used with `-PlexUsername` when no token is supplied. |
+| `-PlexToken` | String | No* | Empty | Plex authentication token. When supplied, the username/password login step is skipped. |
+| `-SingleShowFilter` | String | No | Empty | Process only show titles containing this text. |
+| `-IgnoreShows` | String array | No | Empty | Show titles to skip when scanning the full library. |
+| `-OutputFile` | String | No | Console output | File path for the report. The parent directory must exist. |
+| `-SimpleOutput` | Switch | No | Off | Use compact, one-line-per-episode output. |
+| `-IncludeExtras` | Switch | No | Off | Include TVMaze specials and Season 0 episodes. |
+| `-CacheRetentionDays` | Integer | No | `1` | Maximum age, in days, for cached episode data to be reused. |
+| `-ForceRefresh` | Switch | No | Off | Bypass the cached episode lists and retrieve them again from TVMaze. |
+
+\* Supply either `-PlexToken` or both `-PlexUsername` and `-PlexPassword`.
+
+## How show matching works
+
+For each Plex show, the script attempts to identify the corresponding TVMaze show in this order:
+
+1. Plex TVDB ID via TVMaze's show lookup endpoint.
+2. Plex IMDb ID via TVMaze's show lookup endpoint.
+3. A conservative title search. The title must match after normalisation; when Plex provides a year, the TVMaze premiere year must also match. The fallback is accepted only when it identifies one unambiguous result.
+
+Shows that cannot be resolved are skipped and reported in the script's console output. A skipped show is not proof that it has no missing episodes; it means the script could not safely identify its TVMaze record.
+
+## How episode comparison works
+
+The script reads the episodes Plex knows about and compares them with TVMaze's episode list. It uses air dates where available, then season/episode numbers and episode titles as matching signals. It also attempts to derive episode numbers and dates from media filenames when Plex metadata is incomplete, which helps with some daily shows and date-based naming conventions.
+
+The script ignores episodes that:
+
+- Have not aired more than 24 hours before the scan.
+- Have no usable season, episode number, or air date in the TVMaze data.
+- Belong to Season 0 when `-IncludeExtras` has not been specified.
+
+TVMaze's standard show-episodes endpoint excludes specials by default. The script requests the `specials=1` variant when `-IncludeExtras` is used. See the [TVMaze API documentation](https://www.tvmaze.com/api) for endpoint details.
+
+The report is an aid to identifying possible gaps. Differences in episode ordering, regional releases, alternate/DVD episode lists, metadata quality, or show matching can affect results. Review the relevant Plex and TVMaze records before making library changes.
+
+## Cache
+
+The script creates `tvmaze_cache.json` in the same directory as the PowerShell script. It stores:
+
+- Plex external-ID/title mappings to TVMaze show IDs.
+- TVMaze episode lists and the time each list was cached.
+
+The cache is created automatically and should not be committed to a public repository. It can be deleted while the script is stopped if you want to remove the saved mappings and episode data; the script will rebuild it on the next run. Ensure the script directory is writable by the account running the script.
+
+`-CacheRetentionDays` controls reuse of cached episode lists. The show-ID mapping cache does not currently have a time-based expiry. `-ForceRefresh` refreshes episode lists but does not discard show-ID mappings.
 
 ## Troubleshooting
 
-- **Authentication Errors**: Verify TheTVDB API key and Plex credentials
-- **Network Issues**: Check Plex server URL and network connectivity
-- **Missing Shows**: Ensure shows have proper TVDB metadata in Plex
-- **Console Closes**: Run from PowerShell window or use output redirection
-- **Parameter Issues**: Use `Get-Help ./PlexMissingEpisodes.ps1` to see parameter syntax
+### Plex server URL is required
+
+Supply `-PlexServer`, including the protocol and port. For example:
+
+```powershell
+-PlexServer "http://192.168.1.10:32400"
+```
+
+### Plex authentication fails
+
+Check the Plex credentials or token, and confirm that the token is still valid. If using username/password authentication, make sure the account can sign in through Plex.tv. If the server restricts unauthenticated connections by IP, check the server's **List of IP addresses and networks that are allowed without auth** setting and the network from which the script is connecting.
+
+### Plex library sections cannot be retrieved
+
+Confirm that the Plex server is online, the URL and port are correct, and the supplied token belongs to an account with access to the TV library. Check any firewall rules between the computer running the script and Plex.
+
+### A show is skipped because it cannot be matched
+
+Check that the Plex show has a correct TVDB or IMDb identifier and that the show exists in TVMaze. If the script has no usable external identifier, its title fallback deliberately avoids ambiguous matches. Correcting the show's metadata in Plex may allow it to be matched on the next run.
+
+### TVMaze requests fail
+
+Confirm that the computer has internet access and can reach `https://api.tvmaze.com`. TVMaze may return temporary errors or rate-limit responses. Try again later if the API is temporarily unavailable.
+
+### Cache appears stale
+
+Run with `-ForceRefresh` to fetch episode lists again, or delete `tvmaze_cache.json` to rebuild both the episode and show-mapping caches.
+
+## Security note
+
+When `-PlexServer` uses HTTPS, the current script installs a certificate policy that accepts all HTTPS certificates in the PowerShell process. This bypasses normal certificate validation and can expose HTTPS traffic to interception if the connection is not trusted. Use this script only on a network you trust. For a safer deployment, remove or replace that certificate-validation override and configure a valid certificate for Plex before relying on HTTPS.
+
+Also, do not store Plex credentials, authentication tokens, or the generated cache file in a public Git repository.
+
+## API, attribution, and data licensing
+
+- [TVMaze public REST API](https://www.tvmaze.com/api)
+- [TVMaze API rate limiting and caching information](https://www.tvmaze.com/api#rate-limiting)
+- [Creative Commons Attribution-ShareAlike (CC BY-SA)](https://creativecommons.org/licenses/by-sa/4.0/)
+
+The script includes a short delay between TVMaze requests to reduce the likelihood of hitting API rate limits. TVMaze's public API is provided without an API key. TVMaze states that API data is licensed under **CC BY-SA**: users must credit TVMaze as the source and comply with the ShareAlike requirement. This README links to TVMaze as the data source; retain an appropriate attribution when redistributing or adapting data obtained through the API.
+
+The licence you choose for this PowerShell script is separate from the licence that applies to TVMaze data. Review the [TVMaze API licensing terms](https://www.tvmaze.com/api#licensing) before publishing or redistributing TVMaze-derived data.
+
+## Contributing and issues
+
+Bug reports, corrections, and improvements are welcome. When reporting an issue, include the PowerShell version, the command used (with credentials and tokens removed), relevant error output, and whether the affected show has a TVDB or IMDb ID in Plex.

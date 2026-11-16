@@ -3,3 +3,4 @@
 
 # TVDB Cache
 tvdb_cache.json
+.prettierrc
